@@ -29,6 +29,7 @@ import (
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	"k8s.io/api/admissionregistration/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	admissionmetrics "k8s.io/apiserver/pkg/admission/metrics"
@@ -78,6 +79,8 @@ func (a *mutatingDispatcher) Dispatch(ctx context.Context, attr *generic.Version
 
 // note that callAttrMutatingHook updates attr
 func (a *mutatingDispatcher) callAttrMutatingHook(ctx context.Context, h *v1beta1.Webhook, attr *generic.VersionedAttributes) error {
+	var newVersionedObject runtime.Object
+
 	// Make the webhook request
 	request := request.CreateAdmissionReview(attr)
 	client, err := a.cm.HookClient(h)
@@ -113,11 +116,22 @@ func (a *mutatingDispatcher) callAttrMutatingHook(ctx context.Context, h *v1beta
 	if err != nil {
 		return apierrors.NewInternalError(err)
 	}
+	if _, ok := attr.VersionedObject.(*unstructured.Unstructured); ok {
+		// Custom Resources don't have corresponding Go struct's.
+		// They are represented as Unstructured.
+		newVersionedObject = &unstructured.Unstructured{}
+	} else {
+		newVersionedObject, err = a.plugin.scheme.New(attr.GetKind())
+		if err != nil {
+			return apierrors.NewInternalError(err)
+		}
+	}
 	// TODO: if we have multiple mutating webhooks, we can remember the json
 	// instead of encoding and decoding for each one.
-	if _, _, err := a.plugin.jsonSerializer.Decode(patchedJS, nil, attr.VersionedObject); err != nil {
+	if _, _, err := a.plugin.jsonSerializer.Decode(patchedJS, nil, newVersionedObject); err != nil {
 		return apierrors.NewInternalError(err)
 	}
+	attr.VersionedObject = newVersionedObject
 	a.plugin.scheme.Default(attr.VersionedObject)
 	return nil
 }

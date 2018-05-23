@@ -22,7 +22,9 @@ import (
 	registrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/apiserver/pkg/admission/plugin/webhook/testcerts"
 	"k8s.io/apiserver/pkg/authentication/user"
@@ -75,7 +77,7 @@ func NewFakeDataSource(name string, webhooks []registrationv1beta1.Webhook, muta
 }
 
 // NewAttribute returns static admission Attributes for testing.
-func NewAttribute(namespace string) admission.Attributes {
+func NewAttribute(namespace string, labels map[string]string) admission.Attributes {
 	// Set up a test object for the call
 	kind := corev1.SchemeGroupVersion.WithKind("Pod")
 	name := "my-pod"
@@ -92,11 +94,45 @@ func NewAttribute(namespace string) admission.Attributes {
 			Kind:       "Pod",
 		},
 	}
+	if labels != nil {
+		for k, v := range labels {
+			object.ObjectMeta.Labels[k] = v
+		}
+	}
 	oldObject := corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
 	operation := admission.Update
 	resource := corev1.Resource("pods").WithVersion("v1")
+	subResource := ""
+	userInfo := user.DefaultInfo{
+		Name: "webhook-test",
+		UID:  "webhook-test",
+	}
+
+	return admission.NewAttributesRecord(&object, &oldObject, kind, namespace, name, resource, subResource, operation, &userInfo)
+}
+
+// NewAttributeUnstructured returns static admission Attributes for testing with custom resources.
+func NewAttributeUnstructured(namespace string) admission.Attributes {
+	object := unstructured.Unstructured{}
+	name := "my-test-crd"
+	object.SetKind("TestCRD")
+	object.SetAPIVersion("custom.resource/v1")
+	object.SetNamespace(namespace)
+	object.SetLabels(map[string]string{"crd.name": "my-crd"})
+	oldObject := unstructured.Unstructured{}
+	oldObject.SetKind("TestCRD")
+	oldObject.SetAPIVersion("custom.resource/v1")
+	oldObject.SetNamespace(namespace)
+	operation := admission.Update
+	kind := object.GroupVersionKind()
+
+	resource := schema.GroupVersionResource{
+		Group:    kind.Group,
+		Version:  kind.Version,
+		Resource: "testcrd",
+	}
 	subResource := ""
 	userInfo := user.DefaultInfo{
 		Name: "webhook-test",
@@ -122,11 +158,14 @@ func (c urlConfigGenerator) ccfgURL(urlPath string) registrationv1beta1.WebhookC
 
 // Test is a webhook test case.
 type Test struct {
-	Name          string
-	Webhooks      []registrationv1beta1.Webhook
-	Path          string
-	ExpectAllow   bool
-	ErrorContains string
+	Name             string
+	Webhooks         []registrationv1beta1.Webhook
+	Path             string
+	IsCRD            bool
+	AdditionalLabels map[string]string
+	ExpectLabels     map[string]string
+	ExpectAllow      bool
+	ErrorContains    string
 }
 
 // NewTestCases returns test cases with a given base url.
@@ -157,6 +196,51 @@ func NewTestCases(url *url.URL) []Test {
 				NamespaceSelector: &metav1.LabelSelector{},
 			}},
 			ExpectAllow: true,
+		},
+		{
+			Name: "match & remove label",
+			Webhooks: []registrationv1beta1.Webhook{{
+				Name:              "removeLabel",
+				ClientConfig:      ccfgSVC("removeLabel"),
+				Rules:             matchEverythingRules,
+				NamespaceSelector: &metav1.LabelSelector{},
+			}},
+			ExpectAllow:      true,
+			AdditionalLabels: map[string]string{"remove": "me"},
+			ExpectLabels:     map[string]string{"pod.name": "my-pod"},
+		},
+		{
+			Name: "match & add label",
+			Webhooks: []registrationv1beta1.Webhook{{
+				Name:              "addLabel",
+				ClientConfig:      ccfgSVC("addLabel"),
+				Rules:             matchEverythingRules,
+				NamespaceSelector: &metav1.LabelSelector{},
+			}},
+			ExpectAllow:  true,
+			ExpectLabels: map[string]string{"pod.name": "my-pod", "added": "test"},
+		},
+		{
+			Name: "match CRD & add label",
+			Webhooks: []registrationv1beta1.Webhook{{
+				Name:              "addLabel",
+				ClientConfig:      ccfgSVC("addLabel"),
+				Rules:             matchEverythingRules,
+				NamespaceSelector: &metav1.LabelSelector{},
+			}},
+			IsCRD:        true,
+			ExpectAllow:  true,
+			ExpectLabels: map[string]string{"crd.name": "my-crd", "added": "test"},
+		},
+		{
+			Name: "match & invalid mutation",
+			Webhooks: []registrationv1beta1.Webhook{{
+				Name:              "invalidMutation",
+				ClientConfig:      ccfgSVC("invalidMutation"),
+				Rules:             matchEverythingRules,
+				NamespaceSelector: &metav1.LabelSelector{},
+			}},
+			ErrorContains: "invalid character",
 		},
 		{
 			Name: "match & disallow",
