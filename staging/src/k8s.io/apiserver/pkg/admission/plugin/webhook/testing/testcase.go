@@ -114,13 +114,19 @@ func NewAttribute(namespace string, labels map[string]string) admission.Attribut
 }
 
 // NewAttributeUnstructured returns static admission Attributes for testing with custom resources.
-func NewAttributeUnstructured(namespace string) admission.Attributes {
+func NewAttributeUnstructured(namespace string, labels map[string]string) admission.Attributes {
 	object := unstructured.Unstructured{}
 	name := "my-test-crd"
 	object.SetKind("TestCRD")
 	object.SetAPIVersion("custom.resource/v1")
 	object.SetNamespace(namespace)
-	object.SetLabels(map[string]string{"crd.name": "my-crd"})
+	objectLabels := map[string]string{"crd.name": name}
+	if labels != nil {
+		for k, v := range labels {
+			objectLabels[k] = v
+		}
+	}
+	object.SetLabels(objectLabels)
 	oldObject := unstructured.Unstructured{}
 	oldObject.SetKind("TestCRD")
 	oldObject.SetAPIVersion("custom.resource/v1")
@@ -230,7 +236,20 @@ func NewTestCases(url *url.URL) []Test {
 			}},
 			IsCRD:        true,
 			ExpectAllow:  true,
-			ExpectLabels: map[string]string{"crd.name": "my-crd", "added": "test"},
+			ExpectLabels: map[string]string{"crd.name": "my-test-crd", "added": "test"},
+		},
+		{
+			Name: "match CRD & remove label",
+			Webhooks: []registrationv1beta1.Webhook{{
+				Name:              "removeLabel",
+				ClientConfig:      ccfgSVC("removeLabel"),
+				Rules:             matchEverythingRules,
+				NamespaceSelector: &metav1.LabelSelector{},
+			}},
+			IsCRD:            true,
+			ExpectAllow:      true,
+			AdditionalLabels: map[string]string{"remove": "me"},
+			ExpectLabels:     map[string]string{"crd.name": "my-test-crd"},
 		},
 		{
 			Name: "match & invalid mutation",

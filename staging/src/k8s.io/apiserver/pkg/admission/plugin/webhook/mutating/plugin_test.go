@@ -49,8 +49,6 @@ func TestAdmit(t *testing.T) {
 	defer close(stopCh)
 
 	for _, tt := range webhooktesting.NewTestCases(serverURL) {
-		var attr admission.Attributes
-
 		wh, err := NewMutatingWebhook(nil)
 		if err != nil {
 			t.Errorf("%s: failed to create mutating webhook: %v", tt.Name, err)
@@ -74,8 +72,9 @@ func TestAdmit(t *testing.T) {
 			continue
 		}
 
+		var attr admission.Attributes
 		if tt.IsCRD {
-			attr = webhooktesting.NewAttributeUnstructured(ns)
+			attr = webhooktesting.NewAttributeUnstructured(ns, tt.AdditionalLabels)
 		} else {
 			attr = webhooktesting.NewAttribute(ns, tt.AdditionalLabels)
 		}
