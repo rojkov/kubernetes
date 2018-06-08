@@ -82,26 +82,23 @@ func NewAttribute(namespace string, labels map[string]string) admission.Attribut
 	kind := corev1.SchemeGroupVersion.WithKind("Pod")
 	name := "my-pod"
 	object := corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{
-				"pod.name": name,
-			},
-			Name:      name,
-			Namespace: namespace,
-		},
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "Pod",
 		},
 	}
+	object.SetName(name)
+	object.SetNamespace(namespace)
+	objectLabels := map[string]string{"pod.name": name}
 	if labels != nil {
 		for k, v := range labels {
-			object.ObjectMeta.Labels[k] = v
+			objectLabels[k] = v
 		}
 	}
-	oldObject := corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-	}
+	object.SetLabels(objectLabels)
+	oldObject := corev1.Pod{}
+	oldObject.SetName(name)
+	oldObject.SetNamespace(namespace)
 	operation := admission.Update
 	resource := corev1.Resource("pods").WithVersion("v1")
 	subResource := ""
@@ -119,6 +116,7 @@ func NewAttributeUnstructured(namespace string, labels map[string]string) admiss
 	name := "my-test-crd"
 	object.SetKind("TestCRD")
 	object.SetAPIVersion("custom.resource/v1")
+	object.SetName(name)
 	object.SetNamespace(namespace)
 	objectLabels := map[string]string{"crd.name": name}
 	if labels != nil {
