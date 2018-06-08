@@ -79,14 +79,16 @@ func NewFakeDataSource(name string, webhooks []registrationv1beta1.Webhook, muta
 // NewAttribute returns static admission Attributes for testing.
 func NewAttribute(namespace string, labels map[string]string) admission.Attributes {
 	// Set up a test object for the call
-	kind := corev1.SchemeGroupVersion.WithKind("Pod")
-	name := "my-pod"
 	object := corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "Pod",
 		},
 	}
+	oldObject := corev1.Pod{}
+	kind := corev1.SchemeGroupVersion.WithKind("Pod")
+	name := "my-pod"
+
 	object.SetName(name)
 	object.SetNamespace(namespace)
 	objectLabels := map[string]string{"pod.name": name}
@@ -96,11 +98,15 @@ func NewAttribute(namespace string, labels map[string]string) admission.Attribut
 		}
 	}
 	object.SetLabels(objectLabels)
-	oldObject := corev1.Pod{}
 	oldObject.SetName(name)
 	oldObject.SetNamespace(namespace)
+
 	operation := admission.Update
-	resource := corev1.Resource("pods").WithVersion("v1")
+	resource := schema.GroupVersionResource{
+		Group:    kind.Group,
+		Version:  kind.Version,
+		Resource: "pods",
+	}
 	subResource := ""
 	userInfo := user.DefaultInfo{
 		Name: "webhook-test",
@@ -112,10 +118,16 @@ func NewAttribute(namespace string, labels map[string]string) admission.Attribut
 
 // NewAttributeUnstructured returns static admission Attributes for testing with custom resources.
 func NewAttributeUnstructured(namespace string, labels map[string]string) admission.Attributes {
+	// Set up a test object for the call
 	object := unstructured.Unstructured{}
-	name := "my-test-crd"
 	object.SetKind("TestCRD")
 	object.SetAPIVersion("custom.resource/v1")
+	oldObject := unstructured.Unstructured{}
+	oldObject.SetKind("TestCRD")
+	oldObject.SetAPIVersion("custom.resource/v1")
+	kind := object.GroupVersionKind()
+	name := "my-test-crd"
+
 	object.SetName(name)
 	object.SetNamespace(namespace)
 	objectLabels := map[string]string{"crd.name": name}
@@ -125,12 +137,11 @@ func NewAttributeUnstructured(namespace string, labels map[string]string) admiss
 		}
 	}
 	object.SetLabels(objectLabels)
-	oldObject := unstructured.Unstructured{}
-	oldObject.SetKind("TestCRD")
-	oldObject.SetAPIVersion("custom.resource/v1")
+
+	oldObject.SetName(name)
 	oldObject.SetNamespace(namespace)
+
 	operation := admission.Update
-	kind := object.GroupVersionKind()
 
 	resource := schema.GroupVersionResource{
 		Group:    kind.Group,
