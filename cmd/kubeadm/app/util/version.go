@@ -216,15 +216,16 @@ func kubeadmVersion(info string) (string, error) {
 // This is done to conform with "stable-X" and only allow remote versions from
 // the same Patch level release.
 func validateStableVersion(remoteVersion, clientVersion string) (string, error) {
+	verRemote, err := versionutil.ParseGeneric(remoteVersion)
+	if err != nil {
+		return "", pkgerrors.Wrap(err, "remote version error")
+	}
+
 	if clientVersion == "" {
 		klog.Infof("could not obtain client version; using remote version: %s", remoteVersion)
 		return remoteVersion, nil
 	}
 
-	verRemote, err := versionutil.ParseGeneric(remoteVersion)
-	if err != nil {
-		return "", pkgerrors.Wrap(err, "remote version error")
-	}
 	verClient, err := versionutil.ParseGeneric(clientVersion)
 	if err != nil {
 		return "", pkgerrors.Wrap(err, "client version error")
