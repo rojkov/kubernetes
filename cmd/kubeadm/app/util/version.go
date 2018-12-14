@@ -83,8 +83,11 @@ func KubernetesReleaseVersion(version string) (string, error) {
 		// Try to obtain a client version.
 		clientVersion, _ = kubeadmVersion(pkgversion.Get().String())
 		// Fetch version from the internet.
-		url := fmt.Sprintf("%s/%s.txt", bucketURL, versionLabel)
-		body, err := fetchFromURL(url, getReleaseVersionTimeout)
+		body, err := fetchFromURL(fmt.Sprintf("%s/%s.txt", bucketURL, versionLabel), getReleaseVersionTimeout)
+		if err == nil && kubeReleaseLabelRegex.MatchString(body) {
+			// In case we've got a recursive pointer (e.g. from stable to stable-1) try once again.
+			body, err = fetchFromURL(fmt.Sprintf("%s/%s.txt", bucketURL, body), getReleaseVersionTimeout)
+		}
 		if err != nil {
 			// If the network operaton was successful but the server did not reply with StatusOK
 			if body != "" {
