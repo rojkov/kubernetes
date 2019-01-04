@@ -741,9 +741,9 @@ func TestGetInitConfigurationFromCluster(t *testing.T) {
 				}
 			}
 
-			cfg, err := getInitConfigurationFromCluster(tmpdir, client, rt.newControlPlane)
+			cfg, err := GetInitConfigurationFromCluster("unittest", tmpdir, client, rt.newControlPlane)
 			if rt.expectedError != (err != nil) {
-				t.Errorf("unexpected return err from getInitConfigurationFromCluster: %v", err)
+				t.Errorf("unexpected return err from GetInitConfigurationFromCluster: %v", err)
 				return
 			}
 			if rt.expectedError {

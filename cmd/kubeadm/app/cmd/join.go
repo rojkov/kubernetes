@@ -691,9 +691,14 @@ func fetchInitConfiguration(tlsBootstrapCfg *clientcmdapi.Config) (*kubeadmapi.I
 	}
 
 	// Fetches the init configuration
-	initConfiguration, err := configutil.FetchConfigFromFileOrCluster(tlsClient, "join", "", true)
+	initConfiguration, err := configutil.GetInitConfigurationFromCluster("join", kubeadmconstants.KubernetesDir, tlsClient, true)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to fetch the kubeadm-config ConfigMap")
+	}
+
+	// Apply dynamic defaults
+	if err := configutil.SetInitDynamicDefaults(initConfiguration); err != nil {
+		return nil, err
 	}
 
 	return initConfiguration, nil

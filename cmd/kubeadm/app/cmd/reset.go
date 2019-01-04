@@ -207,7 +207,7 @@ func getEtcdDataDir(manifestPath string, client clientset.Interface) (string, er
 	var dataDir string
 
 	if client != nil {
-		cfg, err := configutil.FetchConfigFromFileOrCluster(client, "reset", "", false)
+		cfg, err := configutil.GetInitConfigurationFromCluster("reset", kubeadmconstants.KubernetesDir, client, false)
 		if err == nil && cfg.Etcd.Local != nil {
 			return cfg.Etcd.Local.DataDir, nil
 		}

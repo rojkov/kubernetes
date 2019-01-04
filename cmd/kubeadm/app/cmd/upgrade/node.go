@@ -229,9 +229,14 @@ func RunUpgradeControlPlane(flags *controlplaneUpgradeFlags) error {
 	waiter := apiclient.NewKubeWaiter(client, upgrade.UpgradeManifestTimeout, os.Stdout)
 
 	// Fetches the cluster configuration
-	cfg, err := configutil.FetchConfigFromFileOrCluster(client, "upgrade", "", false)
+	cfg, err := configutil.GetInitConfigurationFromCluster("upgrade", constants.KubernetesDir, client, false)
 	if err != nil {
 		return errors.Wrap(err, "unable to fetch the kubeadm-config ConfigMap")
+	}
+
+	// Apply dynamic defaults
+	if err := configutil.SetInitDynamicDefaults(cfg); err != nil {
+		return errors.Wrap(err, "unable to set defaults to cluster configuration")
 	}
 
 	// Rotate API server certificate if needed
