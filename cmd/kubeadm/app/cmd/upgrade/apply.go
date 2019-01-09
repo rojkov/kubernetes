@@ -56,7 +56,6 @@ type applyFlags struct {
 	etcdUpgrade        bool
 	criSocket          string
 	newK8sVersionStr   string
-	newK8sVersion      *version.Version
 	imagePullTimeout   time.Duration
 }
 
@@ -171,11 +170,10 @@ func runApply(flags *applyFlags) error {
 
 	// Use normalized version string in all following code.
 	flags.newK8sVersionStr = cfg.KubernetesVersion
-	k8sVer, err := version.ParseSemantic(flags.newK8sVersionStr)
+	newK8sVersion, err := version.ParseSemantic(cfg.KubernetesVersion)
 	if err != nil {
-		return errors.Errorf("unable to parse normalized version %q as a semantic version", flags.newK8sVersionStr)
+		return errors.Errorf("unable to parse normalized version %q as a semantic version", cfg.KubernetesVersion)
 	}
-	flags.newK8sVersion = k8sVer
 
 	if err := features.ValidateVersion(features.InitFeatureGates, cfg.FeatureGates, cfg.KubernetesVersion); err != nil {
 		return err
@@ -183,7 +181,7 @@ func runApply(flags *applyFlags) error {
 
 	// Enforce the version skew policies
 	klog.V(1).Infof("[upgrade/version] enforcing version skew policies")
-	if err := EnforceVersionPolicies(flags, versionGetter); err != nil {
+	if err := EnforceVersionPolicies(newK8sVersion, flags, versionGetter); err != nil {
 		return errors.Wrap(err, "[upgrade/version] FATAL")
 	}
 
@@ -216,7 +214,7 @@ func runApply(flags *applyFlags) error {
 
 	// Upgrade RBAC rules and addons.
 	klog.V(1).Infof("[upgrade/postupgrade] upgrading RBAC rules and addons")
-	if err := upgrade.PerformPostUpgradeTasks(client, cfg, flags.newK8sVersion, flags.dryRun); err != nil {
+	if err := upgrade.PerformPostUpgradeTasks(client, cfg, newK8sVersion, flags.dryRun); err != nil {
 		return errors.Wrap(err, "[upgrade/postupgrade] FATAL post-upgrade error")
 	}
 
@@ -235,10 +233,10 @@ func runApply(flags *applyFlags) error {
 
 // EnforceVersionPolicies makes sure that the version the user specified is valid to upgrade to
 // There are both fatal and skippable (with --force) errors
-func EnforceVersionPolicies(flags *applyFlags, versionGetter upgrade.VersionGetter) error {
+func EnforceVersionPolicies(newK8sVersion *version.Version, flags *applyFlags, versionGetter upgrade.VersionGetter) error {
 	fmt.Printf("[upgrade/version] You have chosen to change the cluster version to %q\n", flags.newK8sVersionStr)
 
-	versionSkewErrs := upgrade.EnforceVersionPolicies(versionGetter, flags.newK8sVersionStr, flags.newK8sVersion, flags.allowExperimentalUpgrades, flags.allowRCUpgrades)
+	versionSkewErrs := upgrade.EnforceVersionPolicies(versionGetter, flags.newK8sVersionStr, newK8sVersion, flags.allowExperimentalUpgrades, flags.allowRCUpgrades)
 	if versionSkewErrs != nil {
 
 		if len(versionSkewErrs.Mandatory) > 0 {
