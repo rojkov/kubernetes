@@ -161,16 +161,11 @@ func ConfigFileAndDefaultsToInternalConfig(cfgPath string, defaultversionedcfg *
 	internalcfg := &kubeadmapi.InitConfiguration{}
 
 	if cfgPath != "" {
-		// Loads configuration from config file, if provided
+		var err error
+
 		// Nb. --config overrides command line flags
 		klog.V(1).Infoln("loading configuration from the given file")
-
-		b, err := ioutil.ReadFile(cfgPath)
-		if err != nil {
-			return nil, errors.Wrapf(err, "unable to read config from %q ", cfgPath)
-		}
-		internalcfg, err = BytesToInternalConfig(b)
-		if err != nil {
+		if internalcfg, err = LoadInitConfigurationFromFile(cfgPath); err != nil {
 			return nil, err
 		}
 	} else {
@@ -192,8 +187,12 @@ func ConfigFileAndDefaultsToInternalConfig(cfgPath string, defaultversionedcfg *
 }
 
 // BytesToInternalConfig converts a byte slice to an internal, defaulted and validated configuration object.
-// The byte slice may contain one or many different YAML documents. These YAML documents are parsed one-by-one
-// and well-known ComponentConfig GroupVersionKinds are stored inside of the internal InitConfiguration struct
+// Basically the function unmarshals a versioned configuration populated from the byte slice, converts it to
+// the internal API types, then defaults and validates.
+// NB: the byte slice may contain multiple YAML docs with a combination of
+//      - a YAML with a InitConfiguration object (without embedded ClusterConfiguration)
+//      - a YAML with a ClusterConfiguration object (without embedded component configs) stored inside InitConfiguration
+//      - separate YAMLs for ComponentConfig objects stored inside ClusterConfiguration.
 func BytesToInternalConfig(b []byte) (*kubeadmapi.InitConfiguration, error) {
 	var initcfg *kubeadmapi.InitConfiguration
 	var clustercfg *kubeadmapi.ClusterConfiguration
@@ -278,6 +277,22 @@ func BytesToInternalConfig(b []byte) (*kubeadmapi.InitConfiguration, error) {
 		}
 	}
 	return initcfg, nil
+}
+
+// LoadInitConfigurationFromFile loads InitConfiguration object from file, then defaults and validates it.
+// Basically the function unmarshals a versioned configuration populated from the file, converts it to
+// the internal API types, then defaults and validates.
+// NB: the file may contain multiple YAML docs with a combination of
+//      - a YAML with a InitConfiguration object (without embedded ClusterConfiguration)
+//      - a YAML with a ClusterConfiguration object (without embedded component configs) stored inside InitConfiguration
+//      - separate YAMLs for ComponentConfig objects stored inside ClusterConfiguration.
+func LoadInitConfigurationFromFile(cfgPath string) (*kubeadmapi.InitConfiguration, error) {
+	configBytes, err := ioutil.ReadFile(cfgPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return BytesToInternalConfig(configBytes)
 }
 
 func defaultedInternalConfig() *kubeadmapi.ClusterConfiguration {

@@ -19,6 +19,8 @@ package config
 import (
 	"bytes"
 	"io/ioutil"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -27,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 	kubeadmapiv1beta1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
+	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
 )
 
 const (
@@ -211,6 +214,76 @@ apiVersion: foo.k8s.io/v1
 			actual := consistentOrderByteSlice(rt.in)
 			if !reflect.DeepEqual(rt.expected, actual) {
 				t2.Errorf("the expected and actual output differs.\n\texpected: %s\n\tout: %s\n", rt.expected, actual)
+			}
+		})
+	}
+}
+
+func TestLoadInitConfigurationFromFile(t *testing.T) {
+	// Create temp folder for the test case
+	tmpdir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("Couldn't create tmpdir")
+	}
+	defer os.RemoveAll(tmpdir)
+
+	var tests = []struct {
+		name         string
+		fileContents []byte
+	}{
+		{
+			name:         "v1beta1.partial1",
+			fileContents: cfgFiles["InitConfiguration_v1beta1"],
+		},
+		{
+			name:         "v1beta1.partial2",
+			fileContents: cfgFiles["ClusterConfiguration_v1beta1"],
+		},
+		{
+			name: "v1beta1.full",
+			fileContents: bytes.Join([][]byte{
+				cfgFiles["InitConfiguration_v1beta1"],
+				cfgFiles["ClusterConfiguration_v1beta1"],
+				cfgFiles["Kube-proxy_componentconfig"],
+				cfgFiles["Kubelet_componentconfig"],
+			}, []byte(kubeadmconstants.YAMLDocumentSeparator)),
+		},
+		{
+			name:         "v1alpha3.partial1",
+			fileContents: cfgFiles["InitConfiguration_v1alpha3"],
+		},
+		{
+			name:         "v1alpha3.partial2",
+			fileContents: cfgFiles["ClusterConfiguration_v1alpha3"],
+		},
+		{
+			name: "v1alpha3.full",
+			fileContents: bytes.Join([][]byte{
+				cfgFiles["InitConfiguration_v1alpha3"],
+				cfgFiles["ClusterConfiguration_v1alpha3"],
+				cfgFiles["Kube-proxy_componentconfig"],
+				cfgFiles["Kubelet_componentconfig"],
+			}, []byte(kubeadmconstants.YAMLDocumentSeparator)),
+		},
+	}
+
+	for _, rt := range tests {
+		t.Run(rt.name, func(t2 *testing.T) {
+			cfgPath := filepath.Join(tmpdir, rt.name)
+			err := ioutil.WriteFile(cfgPath, rt.fileContents, 0644)
+			if err != nil {
+				t.Errorf("Couldn't create file")
+				return
+			}
+
+			obj, err := LoadInitConfigurationFromFile(cfgPath)
+			if err != nil {
+				t.Errorf("Error reading file: %v", err)
+				return
+			}
+
+			if obj == nil {
+				t.Errorf("Unexpected nil return value")
 			}
 		})
 	}
