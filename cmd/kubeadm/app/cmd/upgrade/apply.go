@@ -27,8 +27,6 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
-	kubeadmapiv1beta1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
-	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/validation"
 	"k8s.io/kubernetes/cmd/kubeadm/app/cmd/options"
 	cmdutil "k8s.io/kubernetes/cmd/kubeadm/app/cmd/util"
 	"k8s.io/kubernetes/cmd/kubeadm/app/constants"
@@ -77,44 +75,7 @@ func NewCmdApply(apf *applyPlanFlags) *cobra.Command {
 		DisableFlagsInUseLine: true,
 		Short:                 "Upgrade your Kubernetes cluster to the specified version.",
 		Run: func(cmd *cobra.Command, args []string) {
-			var newK8sVersionStr string
-			var err error
-			flags.ignorePreflightErrorsSet, err = validation.ValidateIgnorePreflightErrors(flags.ignorePreflightErrors)
-			kubeadmutil.CheckErr(err)
-
-			// Ensure the user is root
-			klog.V(1).Infof("running preflight checks")
-			err = runPreflightChecks(flags.ignorePreflightErrorsSet)
-			kubeadmutil.CheckErr(err)
-
-			// If the version is specified in config file, pick up that value.
-			if flags.cfgPath != "" {
-				klog.V(1).Infof("fetching configuration from file %s", flags.cfgPath)
-				// Note that cfg isn't preserved here, it's just an one-off to populate flags.newK8sVersionStr based on --config
-				cfg, err := configutil.ConfigFileAndDefaultsToInternalConfig(flags.cfgPath, &kubeadmapiv1beta1.InitConfiguration{})
-				kubeadmutil.CheckErr(err)
-
-				if cfg.KubernetesVersion != "" {
-					newK8sVersionStr = cfg.KubernetesVersion
-				}
-			}
-
-			// If the new version is already specified in config file, version arg is optional.
-			if newK8sVersionStr == "" {
-				err = cmdutil.ValidateExactArgNumber(args, []string{"version"})
-				kubeadmutil.CheckErr(err)
-			}
-
-			// If option was specified in both args and config file, args will overwrite the config file.
-			if len(args) == 1 {
-				newK8sVersionStr = args[0]
-			}
-
-			if len(newK8sVersionStr) == 0 {
-				kubeadmutil.CheckErr(errors.New("version string can't be empty"))
-			}
-
-			err = runApply(flags, newK8sVersionStr)
+			err := runApply(flags, args)
 			kubeadmutil.CheckErr(err)
 		},
 	}
@@ -147,12 +108,12 @@ func NewCmdApply(apf *applyPlanFlags) *cobra.Command {
 //   - Creating the RBAC rules for the bootstrap tokens and the cluster-info ConfigMap
 //   - Applying new kube-dns and kube-proxy manifests
 //   - Uploads the newly used configuration to the cluster ConfigMap
-func runApply(flags *applyFlags, newK8sVersionStr string) error {
+func runApply(flags *applyFlags, args []string) error {
 
 	// Start with the basics, verify that the cluster is healthy and get the configuration from the cluster (using the ConfigMap)
 	klog.V(1).Infof("[upgrade/apply] verifying health of cluster")
 	klog.V(1).Infof("[upgrade/apply] retrieving configuration from cluster")
-	client, versionGetter, cfg, err := enforceRequirements(flags.applyPlanFlags, flags.dryRun, newK8sVersionStr)
+	client, versionGetter, cfg, err := enforceRequirements(flags.applyPlanFlags, args, flags.dryRun, true)
 	if err != nil {
 		return err
 	}

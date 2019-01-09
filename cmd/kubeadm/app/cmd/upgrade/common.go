@@ -31,7 +31,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/klog"
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
+	kubeadmapiv1beta1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
+	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/validation"
+	cmdutil "k8s.io/kubernetes/cmd/kubeadm/app/cmd/util"
 	"k8s.io/kubernetes/cmd/kubeadm/app/constants"
 	"k8s.io/kubernetes/cmd/kubeadm/app/features"
 	"k8s.io/kubernetes/cmd/kubeadm/app/phases/upgrade"
@@ -43,7 +47,45 @@ import (
 )
 
 // enforceRequirements verifies that it's okay to upgrade and then returns the variables needed for the rest of the procedure
-func enforceRequirements(flags *applyPlanFlags, dryRun bool, newK8sVersion string) (clientset.Interface, upgrade.VersionGetter, *kubeadmapi.InitConfiguration, error) {
+func enforceRequirements(flags *applyPlanFlags, args []string, dryRun bool, versionIsMandatory bool) (clientset.Interface, upgrade.VersionGetter, *kubeadmapi.InitConfiguration, error) {
+	var newK8sVersion string
+
+	ignorePreflightErrorsSet, err := validation.ValidateIgnorePreflightErrors(flags.ignorePreflightErrors)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Ensure the user is root
+	klog.V(1).Infof("running preflight checks")
+	if err := runPreflightChecks(ignorePreflightErrorsSet); err != nil {
+		return nil, nil, nil, err
+	}
+
+	// If the version is specified in config file, pick up that value.
+	if flags.cfgPath != "" {
+		klog.V(1).Infof("fetching configuration from file %s", flags.cfgPath)
+		// Note that cfg isn't preserved here, it's just an one-off to populate newK8sVersion based on --config
+		cfg, err := configutil.ConfigFileAndDefaultsToInternalConfig(flags.cfgPath, &kubeadmapiv1beta1.InitConfiguration{})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		if cfg.KubernetesVersion != "" {
+			newK8sVersion = cfg.KubernetesVersion
+		}
+	}
+
+	// If option was specified in both args and config file, args will overwrite the config file.
+	if len(args) == 1 {
+		newK8sVersion = args[0]
+	}
+
+	// the version arg is mandatory unless version is specified in the config file
+	if versionIsMandatory && (flags.cfgPath == "" || newK8sVersion != "") {
+		if err = cmdutil.ValidateExactArgNumber(args, []string{"version"}); err != nil {
+			return nil, nil, nil, err
+		}
+	}
 
 	client, err := getClient(flags.kubeConfigPath, dryRun)
 	if err != nil {
@@ -56,7 +98,7 @@ func enforceRequirements(flags *applyPlanFlags, dryRun bool, newK8sVersion strin
 	}
 
 	// Run healthchecks against the cluster
-	if err := upgrade.CheckClusterHealth(client, flags.ignorePreflightErrorsSet); err != nil {
+	if err := upgrade.CheckClusterHealth(client, ignorePreflightErrorsSet); err != nil {
 		return nil, nil, nil, errors.Wrap(err, "[upgrade/health] FATAL")
 	}
 
