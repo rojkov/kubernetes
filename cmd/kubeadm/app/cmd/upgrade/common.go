@@ -33,7 +33,6 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
-	kubeadmapiv1beta1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/validation"
 	cmdutil "k8s.io/kubernetes/cmd/kubeadm/app/cmd/util"
 	"k8s.io/kubernetes/cmd/kubeadm/app/constants"
@@ -48,7 +47,7 @@ import (
 
 // enforceRequirements verifies that it's okay to upgrade and then returns the variables needed for the rest of the procedure
 func enforceRequirements(flags *applyPlanFlags, args []string, dryRun bool, versionIsMandatory bool) (clientset.Interface, upgrade.VersionGetter, *kubeadmapi.InitConfiguration, error) {
-	var newK8sVersion string
+	var cfg *kubeadmapi.InitConfiguration
 
 	ignorePreflightErrorsSet, err := validation.ValidateIgnorePreflightErrors(flags.ignorePreflightErrors)
 	if err != nil {
@@ -59,32 +58,6 @@ func enforceRequirements(flags *applyPlanFlags, args []string, dryRun bool, vers
 	klog.V(1).Infof("running preflight checks")
 	if err := runPreflightChecks(ignorePreflightErrorsSet); err != nil {
 		return nil, nil, nil, err
-	}
-
-	// If the version is specified in config file, pick up that value.
-	if flags.cfgPath != "" {
-		klog.V(1).Infof("fetching configuration from file %s", flags.cfgPath)
-		// Note that cfg isn't preserved here, it's just an one-off to populate newK8sVersion based on --config
-		cfg, err := configutil.ConfigFileAndDefaultsToInternalConfig(flags.cfgPath, &kubeadmapiv1beta1.InitConfiguration{})
-		if err != nil {
-			return nil, nil, nil, err
-		}
-
-		if cfg.KubernetesVersion != "" {
-			newK8sVersion = cfg.KubernetesVersion
-		}
-	}
-
-	// If option was specified in both args and config file, args will overwrite the config file.
-	if len(args) == 1 {
-		newK8sVersion = args[0]
-	}
-
-	// the version arg is mandatory unless version is specified in the config file
-	if versionIsMandatory && (flags.cfgPath == "" || newK8sVersion != "") {
-		if err = cmdutil.ValidateExactArgNumber(args, []string{"version"}); err != nil {
-			return nil, nil, nil, err
-		}
 	}
 
 	client, err := getClient(flags.kubeConfigPath, dryRun)
@@ -102,27 +75,47 @@ func enforceRequirements(flags *applyPlanFlags, args []string, dryRun bool, vers
 		return nil, nil, nil, errors.Wrap(err, "[upgrade/health] FATAL")
 	}
 
-	// Fetch the configuration from a file or ConfigMap and validate it
 	fmt.Println("[upgrade/config] Making sure the configuration is correct:")
-	cfg, err := configutil.FetchConfigFromFileOrCluster(client, "upgrade/config", flags.cfgPath, false)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			fmt.Printf("[upgrade/config] In order to upgrade, a ConfigMap called %q in the %s namespace must exist.\n", constants.KubeadmConfigConfigMap, metav1.NamespaceSystem)
-			fmt.Println("[upgrade/config] Without this information, 'kubeadm upgrade' won't know how to configure your upgraded cluster.")
-			fmt.Println("")
-			fmt.Println("[upgrade/config] Next steps:")
-			fmt.Printf("\t- OPTION 1: Run 'kubeadm config upload from-flags' and specify the same CLI arguments you passed to 'kubeadm init' when you created your master.\n")
-			fmt.Printf("\t- OPTION 2: Run 'kubeadm config upload from-file' and specify the same config file you passed to 'kubeadm init' when you created your master.\n")
-			fmt.Printf("\t- OPTION 3: Pass a config file to 'kubeadm upgrade' using the --config flag.\n")
-			fmt.Println("")
-			err = errors.Errorf("the ConfigMap %q in the %s namespace used for getting configuration information was not found", constants.KubeadmConfigConfigMap, metav1.NamespaceSystem)
+	// If the version is specified in config file, pick up that value.
+	if flags.cfgPath != "" {
+		fmt.Printf("[upgrade/config] Reading configuration options from a file: %s\n", flags.cfgPath)
+		klog.V(1).Infof("fetching configuration from file %s", flags.cfgPath)
+		if cfg, err = configutil.LoadInitConfigurationFromFile(flags.cfgPath); err != nil {
+			return nil, nil, nil, err
 		}
-		return nil, nil, nil, errors.Wrap(err, "[upgrade/config] FATAL")
+	} else {
+		cfg, err = configutil.GetInitConfigurationFromCluster("upgrade/config", constants.KubernetesDir, client, false)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				fmt.Printf("[upgrade/config] In order to upgrade, a ConfigMap called %q in the %s namespace must exist.\n", constants.KubeadmConfigConfigMap, metav1.NamespaceSystem)
+				fmt.Println("[upgrade/config] Without this information, 'kubeadm upgrade' won't know how to configure your upgraded cluster.")
+				fmt.Println("")
+				fmt.Println("[upgrade/config] Next steps:")
+				fmt.Printf("\t- OPTION 1: Run 'kubeadm config upload from-flags' and specify the same CLI arguments you passed to 'kubeadm init' when you created your master.\n")
+				fmt.Printf("\t- OPTION 2: Run 'kubeadm config upload from-file' and specify the same config file you passed to 'kubeadm init' when you created your master.\n")
+				fmt.Printf("\t- OPTION 3: Pass a config file to 'kubeadm upgrade' using the --config flag.\n")
+				fmt.Println("")
+				err = errors.Errorf("the ConfigMap %q in the %s namespace used for getting configuration information was not found", constants.KubeadmConfigConfigMap, metav1.NamespaceSystem)
+			}
+			return nil, nil, nil, errors.Wrap(err, "[upgrade/config] FATAL")
+		}
 	}
 
-	// If a new k8s version should be set, apply the change before printing the config
-	if len(newK8sVersion) != 0 {
-		cfg.KubernetesVersion = newK8sVersion
+	// If option was specified in both args and config file, args will overwrite the config file.
+	if len(args) == 1 {
+		cfg.KubernetesVersion = args[0]
+	}
+
+	// the version arg is mandatory unless version is specified in the config file
+	if versionIsMandatory && (flags.cfgPath == "" || cfg.KubernetesVersion != "") {
+		if err = cmdutil.ValidateExactArgNumber(args, []string{"version"}); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
+	// Apply dynamic defaults and check release version
+	if err = configutil.SetInitDynamicDefaults(cfg); err != nil {
+		return nil, nil, nil, err
 	}
 
 	// If features gates are passed to the command line, use it (otherwise use featureGates from configuration)
