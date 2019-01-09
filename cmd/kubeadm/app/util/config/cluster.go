@@ -19,7 +19,6 @@ package config
 import (
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"path/filepath"
 	"strings"
 
@@ -37,52 +36,6 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/componentconfigs"
 	"k8s.io/kubernetes/cmd/kubeadm/app/constants"
 )
-
-// FetchConfigFromFileOrCluster fetches configuration required for upgrading your cluster from a file (which has precedence) or a ConfigMap in the cluster
-func FetchConfigFromFileOrCluster(client clientset.Interface, logPrefix, cfgPath string, newControlPlane bool) (*kubeadmapi.InitConfiguration, error) {
-	// Load the configuration from a file or the cluster
-	initcfg, err := loadConfiguration(client, logPrefix, cfgPath, newControlPlane)
-	if err != nil {
-		return nil, err
-	}
-
-	// Apply dynamic defaults
-	if err := SetInitDynamicDefaults(initcfg); err != nil {
-		return nil, err
-	}
-	return initcfg, err
-}
-
-// loadConfiguration loads the configuration byte slice from either a file or the cluster ConfigMap
-func loadConfiguration(client clientset.Interface, logPrefix, cfgPath string, newControlPlane bool) (*kubeadmapi.InitConfiguration, error) {
-	// The config file has the highest priority
-	if cfgPath != "" {
-		fmt.Printf("[%s] Reading configuration options from a file: %s\n", logPrefix, cfgPath)
-		return loadInitConfigurationFromFile(cfgPath)
-	}
-
-	return GetInitConfigurationFromCluster(logPrefix, constants.KubernetesDir, client, newControlPlane)
-}
-
-func loadInitConfigurationFromFile(cfgPath string) (*kubeadmapi.InitConfiguration, error) {
-	configBytes, err := ioutil.ReadFile(cfgPath)
-	if err != nil {
-		return nil, err
-	}
-
-	// Unmarshal the versioned configuration populated from the file,
-	// convert it to the internal API types, then default and validate
-	// NB the file contains multiple YAML, with a combination of
-	// 	- a YAML with a InitConfiguration object
-	// 	- a YAML with a ClusterConfiguration object (without embedded component configs)
-	//	- separated YAML for components configs
-	initcfg, err := BytesToInternalConfig(configBytes)
-	if err != nil {
-		return nil, err
-	}
-
-	return initcfg, nil
-}
 
 // GetInitConfigurationFromCluster gets InitConfiguration object from Cluster
 func GetInitConfigurationFromCluster(logPrefix string, kubeconfigDir string, client clientset.Interface, newControlPlane bool) (*kubeadmapi.InitConfiguration, error) {
