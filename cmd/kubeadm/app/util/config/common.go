@@ -28,7 +28,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	netutil "k8s.io/apimachinery/pkg/util/net"
-	"k8s.io/apimachinery/pkg/util/version"
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 	kubeadmscheme "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/scheme"
 	kubeadmapiv1beta1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
@@ -86,33 +85,6 @@ func DetectUnsupportedVersion(b []byte) error {
 		klog.Warningf("WARNING: Detected resource kinds that may not apply: %v", mutuallyExclusive)
 	}
 
-	return nil
-}
-
-// NormalizeKubernetesVersion resolves version labels, sets alternative
-// image registry if requested for CI builds, and validates minimal
-// version that kubeadm SetInitDynamicDefaultssupports.
-func NormalizeKubernetesVersion(cfg *kubeadmapi.ClusterConfiguration) error {
-	// Requested version is automatic CI build, thus use KubernetesCI Image Repository for core images
-	if kubeadmutil.KubernetesIsCIVersion(cfg.KubernetesVersion) {
-		cfg.CIImageRepository = constants.DefaultCIImageRepository
-	}
-
-	// Parse and validate the version argument and resolve possible CI version labels
-	ver, err := kubeadmutil.KubernetesReleaseVersion(cfg.KubernetesVersion)
-	if err != nil {
-		return err
-	}
-	cfg.KubernetesVersion = ver
-
-	// Parse the given kubernetes version and make sure it's higher than the lowest supported
-	k8sVersion, err := version.ParseSemantic(cfg.KubernetesVersion)
-	if err != nil {
-		return errors.Wrapf(err, "couldn't parse Kubernetes version %q", cfg.KubernetesVersion)
-	}
-	if k8sVersion.LessThan(constants.MinimumControlPlaneVersion) {
-		return errors.Errorf("this version of kubeadm only supports deploying clusters with the control plane version >= %s. Current version: %s", constants.MinimumControlPlaneVersion.String(), cfg.KubernetesVersion)
-	}
 	return nil
 }
 

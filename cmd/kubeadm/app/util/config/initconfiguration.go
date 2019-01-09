@@ -31,6 +31,7 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/version"
 	bootstraputil "k8s.io/cluster-bootstrap/token/util"
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 	kubeadmscheme "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/scheme"
@@ -129,9 +130,25 @@ func SetClusterDynamicDefaults(cfg *kubeadmapi.ClusterConfiguration, advertiseAd
 		cfg.ComponentConfigs.KubeProxy.BindAddress = kubeadmapiv1beta1.DefaultProxyBindAddressv6
 	}
 
-	// Resolve possible version labels and validate version string
-	if err := NormalizeKubernetesVersion(cfg); err != nil {
+	if kubeadmutil.KubernetesIsCIVersion(cfg.KubernetesVersion) {
+		// Requested version is automatic CI build, thus use KubernetesCI Image Repository for core images
+		cfg.CIImageRepository = kubeadmconstants.DefaultCIImageRepository
+	}
+
+	// Parse and validate the version argument and resolve possible CI version labels
+	ver, err := kubeadmutil.KubernetesReleaseVersion(cfg.KubernetesVersion)
+	if err != nil {
 		return err
+	}
+	cfg.KubernetesVersion = ver
+
+	// Parse the given kubernetes version and make sure it's higher than the lowest supported
+	k8sVersion, err := version.ParseSemantic(cfg.KubernetesVersion)
+	if err != nil {
+		return errors.Wrapf(err, "couldn't parse Kubernetes version %q", cfg.KubernetesVersion)
+	}
+	if k8sVersion.LessThan(kubeadmconstants.MinimumControlPlaneVersion) {
+		return errors.Errorf("this version of kubeadm only supports deploying clusters with the control plane version >= %s. Current version: %s", kubeadmconstants.MinimumControlPlaneVersion.String(), cfg.KubernetesVersion)
 	}
 
 	// If ControlPlaneEndpoint is specified without a port number defaults it to
