@@ -29,11 +29,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/klog"
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
-	kubeadmapiv1beta1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
-	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/validation"
 	"k8s.io/kubernetes/cmd/kubeadm/app/phases/upgrade"
 	kubeadmutil "k8s.io/kubernetes/cmd/kubeadm/app/util"
-	configutil "k8s.io/kubernetes/cmd/kubeadm/app/util/config"
 	etcdutil "k8s.io/kubernetes/cmd/kubeadm/app/util/etcd"
 )
 
@@ -51,30 +48,7 @@ func NewCmdPlan(apf *applyPlanFlags) *cobra.Command {
 		Use:   "plan [version] [flags]",
 		Short: "Check which versions are available to upgrade to and validate whether your current cluster is upgradeable. To skip the internet check, pass in the optional [version] parameter.",
 		Run: func(_ *cobra.Command, args []string) {
-			var newK8sVersionStr string
-			var err error
-			flags.ignorePreflightErrorsSet, err = validation.ValidateIgnorePreflightErrors(flags.ignorePreflightErrors)
-			kubeadmutil.CheckErr(err)
-			// Ensure the user is root
-			err = runPreflightChecks(flags.ignorePreflightErrorsSet)
-			kubeadmutil.CheckErr(err)
-
-			// If the version is specified in config file, pick up that value.
-			if flags.cfgPath != "" {
-				klog.V(1).Infof("fetching configuration from file %s", flags.cfgPath)
-				cfg, err := configutil.ConfigFileAndDefaultsToInternalConfig(flags.cfgPath, &kubeadmapiv1beta1.InitConfiguration{})
-				kubeadmutil.CheckErr(err)
-
-				if cfg.KubernetesVersion != "" {
-					newK8sVersionStr = cfg.KubernetesVersion
-				}
-			}
-			// If option was specified in both args and config file, args will overwrite the config file.
-			if len(args) == 1 {
-				newK8sVersionStr = args[0]
-			}
-
-			err = runPlan(flags, newK8sVersionStr)
+			err := runPlan(flags, args)
 			kubeadmutil.CheckErr(err)
 		},
 	}
@@ -85,11 +59,11 @@ func NewCmdPlan(apf *applyPlanFlags) *cobra.Command {
 }
 
 // runPlan takes care of outputting available versions to upgrade to for the user
-func runPlan(flags *planFlags, newK8sVersionStr string) error {
+func runPlan(flags *planFlags, args []string) error {
 	// Start with the basics, verify that the cluster is healthy, build a client and a versionGetter. Never dry-run when planning.
 	klog.V(1).Infof("[upgrade/plan] verifying health of cluster")
 	klog.V(1).Infof("[upgrade/plan] retrieving configuration from cluster")
-	client, versionGetter, cfg, err := enforceRequirements(flags.applyPlanFlags, false, newK8sVersionStr)
+	client, versionGetter, cfg, err := enforceRequirements(flags.applyPlanFlags, args, false, false)
 	if err != nil {
 		return err
 	}
