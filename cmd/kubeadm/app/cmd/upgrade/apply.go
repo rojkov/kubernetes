@@ -34,7 +34,6 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/phases/upgrade"
 	kubeadmutil "k8s.io/kubernetes/cmd/kubeadm/app/util"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
-	configutil "k8s.io/kubernetes/cmd/kubeadm/app/util/config"
 	dryrunutil "k8s.io/kubernetes/cmd/kubeadm/app/util/dryrun"
 	etcdutil "k8s.io/kubernetes/cmd/kubeadm/app/util/etcd"
 )
@@ -114,13 +113,6 @@ func runApply(flags *applyFlags, args []string) error {
 		cfg.NodeRegistration.CRISocket = flags.criSocket
 	}
 
-	// Validate requested and validate actual version
-	klog.V(1).Infof("[upgrade/apply] validating requested and actual version")
-	if err := configutil.NormalizeKubernetesVersion(&cfg.ClusterConfiguration); err != nil {
-		return err
-	}
-
-	// Use normalized version string in all following code.
 	newK8sVersion, err := version.ParseSemantic(cfg.KubernetesVersion)
 	if err != nil {
 		return errors.Errorf("unable to parse normalized version %q as a semantic version", cfg.KubernetesVersion)
