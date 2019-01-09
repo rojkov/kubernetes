@@ -86,7 +86,7 @@ func (g *KubeVersionGetter) KubeadmVersion() (string, *versionutil.Version, erro
 
 // VersionFromCILabel resolves a version label like "latest" or "stable" to an actual version using the public Kubernetes CI uploads
 func (g *KubeVersionGetter) VersionFromCILabel(ciVersionLabel, description string) (string, *versionutil.Version, error) {
-	versionStr, err := kubeadmutil.KubernetesReleaseVersion(ciVersionLabel)
+	versionStr, err := kubeadmutil.ResolveVersionLabel("release", ciVersionLabel)
 	if err != nil {
 		return "", nil, errors.Wrapf(err, "Couldn't fetch latest %s from the internet", description)
 	}

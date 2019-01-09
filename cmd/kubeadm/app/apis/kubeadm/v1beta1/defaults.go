@@ -75,10 +75,6 @@ func SetDefaults_InitConfiguration(obj *InitConfiguration) {
 
 // SetDefaults_ClusterConfiguration assigns default values for the ClusterConfiguration
 func SetDefaults_ClusterConfiguration(obj *ClusterConfiguration) {
-	if obj.KubernetesVersion == "" {
-		obj.KubernetesVersion = DefaultKubernetesVersion
-	}
-
 	if obj.Networking.ServiceSubnet == "" {
 		obj.Networking.ServiceSubnet = DefaultServicesSubnet
 	}

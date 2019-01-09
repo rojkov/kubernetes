@@ -21,9 +21,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	neturl "net/url"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	"k8s.io/klog"
@@ -42,6 +45,11 @@ import (
 	kubeadmutil "k8s.io/kubernetes/cmd/kubeadm/app/util"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/config/strict"
 	nodeutil "k8s.io/kubernetes/pkg/util/node"
+	pkgversion "k8s.io/kubernetes/pkg/version"
+)
+
+var (
+	kubeReleaseLabelRegex = regexp.MustCompile(`^[[:lower:]]+(-[-\w_\.]+)?$`)
 )
 
 // SetInitDynamicDefaults checks and sets configuration values for the InitConfiguration object
@@ -118,6 +126,120 @@ func SetAPIEndpointDynamicDefaults(cfg *kubeadmapi.APIEndpoint) error {
 	return nil
 }
 
+func splitBucketVersion(ver string) (string, string) {
+	result := strings.SplitN(ver, "/", 2)
+	if len(result) == 2 {
+		return result[0], result[1]
+	}
+
+	return "release", ver
+}
+
+// kubeadmVersion returns the version of the client without metadata.
+func kubeadmVersion(info string) (string, error) {
+	v, err := version.ParseSemantic(info)
+	if err != nil {
+		return "", errors.Wrap(err, "kubeadm version error")
+	}
+	// There is no utility in k8s.io/apimachinery/pkg/util/version to get the version without the metadata,
+	// so this needs some manual formatting.
+	// Discard offsets after a release label and keep the labels down to e.g. `alpha.0` instead of
+	// including the offset e.g. `alpha.0.206`. This is done to comply with GCR image tags.
+	pre := v.PreRelease()
+	patch := v.Patch()
+	if len(pre) > 0 {
+		if patch > 0 {
+			// If the patch version is more than zero, decrement it and remove the label.
+			// this is done to comply with the latest stable patch release.
+			patch = patch - 1
+			pre = ""
+		} else {
+			split := strings.Split(pre, ".")
+			if len(split) > 2 {
+				pre = split[0] + "." + split[1] // Exclude the third element
+			} else if len(split) < 2 {
+				pre = split[0] + ".0" // Append .0 to a partial label
+			}
+			pre = "-" + pre
+		}
+	}
+	vStr := fmt.Sprintf("v%d.%d.%d%s", v.Major(), v.Minor(), patch, pre)
+	return vStr, nil
+}
+
+// Validate if the remote version is one Minor release newer than the client version.
+// This is done to conform with "stable-X" and only allow remote versions from
+// the same Patch level release.
+func validateStableVersion(bucket, remoteVersion, clientVersion string) (string, error) {
+	verRemote, err := version.ParseGeneric(remoteVersion)
+	if err != nil {
+		return "", errors.Wrap(err, "remote version error")
+	}
+	verClient, err := version.ParseGeneric(clientVersion)
+	if err != nil {
+		return "", errors.Wrap(err, "client version error")
+	}
+	// If the remote Major version is bigger or if the Major versions are the same,
+	// but the remote Minor is bigger use the client version release. This handles Major bumps too.
+	if verClient.Major() < verRemote.Major() ||
+		(verClient.Major() == verRemote.Major()) && verClient.Minor() < verRemote.Minor() {
+		estimatedRelease := fmt.Sprintf("stable-%d.%d", verClient.Major(), verClient.Minor())
+		klog.Infof("remote version is much newer: %s; falling back to: %s", remoteVersion, estimatedRelease)
+		return kubeadmutil.ResolveVersionLabel(bucket, estimatedRelease)
+	}
+	return remoteVersion, nil
+}
+
+// get either 1) user provided version or 2) local Git version or 3) remote version or eventually 4) pre-defined constant
+func getParsedVersion(bucket, userVersion string) (*version.Version, error) {
+	// micro-optimize by checking if user have already provided parsable version
+	parsedVersion, err := version.ParseSemantic(userVersion)
+	if err == nil {
+		return parsedVersion, nil
+	}
+
+	gitVersion, gitVersionErr := kubeadmVersion(pkgversion.Get().String())
+	if gitVersionErr != nil {
+		klog.Warningf("Kubernetes Git version is not set properly: %s. Might be a build system issue.", pkgversion.Get().String())
+	}
+
+	ver := userVersion
+	if ver == "" {
+		if gitVersionErr == nil {
+			return version.ParseSemantic(gitVersion)
+		}
+
+		ver = kubeadmapiv1beta1.DefaultKubernetesVersion
+	}
+
+	// do remote resolution
+	if kubeadmutil.IsVersionLabel(ver) {
+		if ver, err = kubeadmutil.ResolveVersionLabel(bucket, ver); err != nil {
+			if netErr, ok := errors.Cause(err).(*neturl.Error); ok && !netErr.Timeout() {
+				return nil, err
+			}
+
+			// We are in air-gapped environments hence falling back to the client version.
+			if gitVersionErr == nil {
+				klog.Infof("could not fetch a Kubernetes version from the internet: %v", err)
+				klog.Infof("falling back to the local client version: %s", gitVersion)
+				return version.ParseSemantic(gitVersion)
+			}
+
+			klog.Warningf("could not obtain neither client nor remote version; fall back to: %s", kubeadmconstants.CurrentKubernetesVersion)
+			return kubeadmconstants.CurrentKubernetesVersion, nil
+		}
+
+		if gitVersionErr == nil {
+			if ver, err = validateStableVersion(bucket, ver, gitVersion); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return version.ParseSemantic(ver)
+}
+
 // SetClusterDynamicDefaults checks and sets values for the ClusterConfiguration object
 func SetClusterDynamicDefaults(cfg *kubeadmapi.ClusterConfiguration, advertiseAddress string, bindPort int32) error {
 	// Default all the embedded ComponentConfig structs
@@ -130,23 +252,19 @@ func SetClusterDynamicDefaults(cfg *kubeadmapi.ClusterConfiguration, advertiseAd
 		cfg.ComponentConfigs.KubeProxy.BindAddress = kubeadmapiv1beta1.DefaultProxyBindAddressv6
 	}
 
-	if kubeadmutil.KubernetesIsCIVersion(cfg.KubernetesVersion) {
+	bucket, ver := splitBucketVersion(cfg.KubernetesVersion)
+	if bucket == "ci" || bucket == "ci-cross" {
 		// Requested version is automatic CI build, thus use KubernetesCI Image Repository for core images
 		cfg.CIImageRepository = kubeadmconstants.DefaultCIImageRepository
 	}
 
-	// Parse and validate the version argument and resolve possible CI version labels
-	ver, err := kubeadmutil.KubernetesReleaseVersion(cfg.KubernetesVersion)
+	k8sVersion, err := getParsedVersion(bucket, ver)
 	if err != nil {
 		return err
 	}
-	cfg.KubernetesVersion = ver
+	cfg.KubernetesVersion = "v" + k8sVersion.String()
 
-	// Parse the given kubernetes version and make sure it's higher than the lowest supported
-	k8sVersion, err := version.ParseSemantic(cfg.KubernetesVersion)
-	if err != nil {
-		return errors.Wrapf(err, "couldn't parse Kubernetes version %q", cfg.KubernetesVersion)
-	}
+	// Make sure the version is higher than the lowest supported
 	if k8sVersion.LessThan(kubeadmconstants.MinimumControlPlaneVersion) {
 		return errors.Errorf("this version of kubeadm only supports deploying clusters with the control plane version >= %s. Current version: %s", kubeadmconstants.MinimumControlPlaneVersion.String(), cfg.KubernetesVersion)
 	}
