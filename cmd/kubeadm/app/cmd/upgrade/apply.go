@@ -59,11 +59,6 @@ type applyFlags struct {
 	imagePullTimeout   time.Duration
 }
 
-// SessionIsInteractive returns true if the session is of an interactive type (the default, can be opted out of with -y, -f or --dry-run)
-func (f *applyFlags) SessionIsInteractive() bool {
-	return !f.nonInteractiveMode
-}
-
 // NewCmdApply returns the cobra command for `kubeadm upgrade apply`
 func NewCmdApply(apf *applyPlanFlags) *cobra.Command {
 	flags := &applyFlags{
@@ -183,8 +178,8 @@ func runApply(flags *applyFlags) error {
 		return errors.Wrap(err, "[upgrade/version] FATAL")
 	}
 
-	// If the current session is interactive, ask the user whether they really want to upgrade
-	if flags.SessionIsInteractive() {
+	// If the current session is interactive, ask the user whether they really want to upgrade.
+	if !(flags.nonInteractiveMode || flags.dryRun || flags.force) {
 		if err := InteractivelyConfirmUpgrade("Are you sure you want to proceed with the upgrade?"); err != nil {
 			return err
 		}
@@ -231,11 +226,6 @@ func runApply(flags *applyFlags) error {
 
 // SetImplicitFlags handles dynamically defaulting flags based on each other's value
 func SetImplicitFlags(flags *applyFlags) error {
-	// If we are in dry-run or force mode; we should automatically execute this command non-interactively
-	if flags.dryRun || flags.force {
-		flags.nonInteractiveMode = true
-	}
-
 	if len(flags.newK8sVersionStr) == 0 {
 		return errors.New("version string can't be empty")
 	}
