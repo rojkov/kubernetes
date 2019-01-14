@@ -113,6 +113,9 @@ func enforceRequirements(flags *applyPlanFlags, args []string, dryRun bool, vers
 		}
 	}
 
+	// keep user provided version for offline getter without any validation
+	userProvidedVersion := cfg.KubernetesVersion
+
 	// Apply dynamic defaults and check release version
 	if err = configutil.SetInitDynamicDefaults(cfg); err != nil {
 		return nil, nil, nil, err
@@ -140,7 +143,7 @@ func enforceRequirements(flags *applyPlanFlags, args []string, dryRun bool, vers
 	}
 
 	// Use a real version getter interface that queries the API server, the kubeadm client and the Kubernetes CI system for latest versions
-	return client, upgrade.NewOfflineVersionGetter(upgrade.NewKubeVersionGetter(client, os.Stdout), cfg.KubernetesVersion), cfg, nil
+	return client, upgrade.NewOfflineVersionGetter(upgrade.NewKubeVersionGetter(client, os.Stdout), userProvidedVersion), cfg, nil
 }
 
 // printConfiguration prints the external version of the API to yaml
