@@ -286,23 +286,27 @@ func TestCIBuildVersion(t *testing.T) {
 	}
 }
 
-func TestNormalizedBuildVersionVersion(t *testing.T) {
+func TestNormalizeBuildVersionVersion(t *testing.T) {
 	type T struct {
-		input    string
-		expected string
+		input         string
+		expected      string
+		expectedError bool
 	}
 	cases := []T{
-		{"v1.7.0", "v1.7.0"},
-		{"v1.8.0-alpha.2.1231+afabd012389d53a", "v1.8.0-alpha.2.1231+afabd012389d53a"},
-		{"1.7.0", "v1.7.0"},
-		{"unknown-1", ""},
+		{"v1.7.0", "v1.7.0", false},
+		{"v1.8.0-alpha.2.1231+afabd012389d53a", "v1.8.0-alpha.2.1231+afabd012389d53a", false},
+		{"1.7.0", "v1.7.0", false},
+		{"unknown-1", "", true},
 	}
 
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("input:%s/expected:%s", tc.input, tc.expected), func(t *testing.T) {
-			output := normalizedBuildVersion(tc.input)
+			output, err := normalizeBuildVersion(tc.input)
+			if err == nil && tc.expectedError {
+				t.Errorf("normalizeBuildVersion: expected error was not triggered for %q", tc.input)
+			}
 			if output != tc.expected {
-				t.Errorf("normalizedBuildVersion: unexpected output %q for input %q. Expected: %q", output, tc.input, tc.expected)
+				t.Errorf("normalizeBuildVersion: unexpected output %q for input %q. Expected: %q", output, tc.input, tc.expected)
 			}
 		})
 	}
