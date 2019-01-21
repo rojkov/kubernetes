@@ -34,16 +34,8 @@ import (
 	etcdutil "k8s.io/kubernetes/cmd/kubeadm/app/util/etcd"
 )
 
-type planFlags struct {
-	*applyPlanFlags
-}
-
 // NewCmdPlan returns the cobra command for `kubeadm upgrade plan`
-func NewCmdPlan(apf *applyPlanFlags) *cobra.Command {
-	flags := &planFlags{
-		applyPlanFlags: apf,
-	}
-
+func NewCmdPlan(flags *applyPlanFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "plan [version] [flags]",
 		Short: "Check which versions are available to upgrade to and validate whether your current cluster is upgradeable. To skip the internet check, pass in the optional [version] parameter.",
@@ -54,16 +46,16 @@ func NewCmdPlan(apf *applyPlanFlags) *cobra.Command {
 	}
 
 	// Register the common flags for apply and plan
-	addApplyPlanFlags(cmd.Flags(), flags.applyPlanFlags)
+	addApplyPlanFlags(cmd.Flags(), flags)
 	return cmd
 }
 
 // runPlan takes care of outputting available versions to upgrade to for the user
-func runPlan(flags *planFlags, args []string) error {
+func runPlan(flags *applyPlanFlags, args []string) error {
 	// Start with the basics, verify that the cluster is healthy, build a client and a versionGetter. Never dry-run when planning.
 	klog.V(1).Infof("[upgrade/plan] verifying health of cluster")
 	klog.V(1).Infof("[upgrade/plan] retrieving configuration from cluster")
-	client, versionGetter, cfg, err := enforceRequirements(flags.applyPlanFlags, args, false, false)
+	client, versionGetter, cfg, err := enforceRequirements(flags, args, false, false)
 	if err != nil {
 		return err
 	}
