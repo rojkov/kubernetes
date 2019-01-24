@@ -40,7 +40,10 @@ func NewCmdPlan(flags *applyPlanFlags) *cobra.Command {
 		Use:   "plan [version] [flags]",
 		Short: "Check which versions are available to upgrade to and validate whether your current cluster is upgradeable. To skip the internet check, pass in the optional [version] parameter.",
 		Run: func(_ *cobra.Command, args []string) {
-			err := runPlan(flags, args)
+			userVersion, err := getK8sVersionFromUserInput(flags, args, false)
+			kubeadmutil.CheckErr(err)
+
+			err = runPlan(flags, userVersion)
 			kubeadmutil.CheckErr(err)
 		},
 	}
@@ -51,11 +54,11 @@ func NewCmdPlan(flags *applyPlanFlags) *cobra.Command {
 }
 
 // runPlan takes care of outputting available versions to upgrade to for the user
-func runPlan(flags *applyPlanFlags, args []string) error {
+func runPlan(flags *applyPlanFlags, userVersion string) error {
 	// Start with the basics, verify that the cluster is healthy, build a client and a versionGetter. Never dry-run when planning.
 	klog.V(1).Infof("[upgrade/plan] verifying health of cluster")
 	klog.V(1).Infof("[upgrade/plan] retrieving configuration from cluster")
-	client, versionGetter, cfg, err := enforceRequirements(flags, args, false, false)
+	client, versionGetter, cfg, err := enforceRequirements(flags, userVersion, false)
 	if err != nil {
 		return err
 	}

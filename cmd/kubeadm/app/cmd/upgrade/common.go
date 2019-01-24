@@ -46,20 +46,8 @@ import (
 	kubeconfigutil "k8s.io/kubernetes/cmd/kubeadm/app/util/kubeconfig"
 )
 
-// enforceRequirements verifies that it's okay to upgrade and then returns the variables needed for the rest of the procedure
-func enforceRequirements(flags *applyPlanFlags, args []string, dryRun bool, versionIsMandatory bool) (clientset.Interface, upgrade.VersionGetter, *kubeadmapi.InitConfiguration, error) {
+func getK8sVersionFromUserInput(flags *applyPlanFlags, args []string, versionIsMandatory bool) (string, error) {
 	var newK8sVersion string
-
-	ignorePreflightErrorsSet, err := validation.ValidateIgnorePreflightErrors(flags.ignorePreflightErrors)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	// Ensure the user is root
-	klog.V(1).Infof("running preflight checks")
-	if err := runPreflightChecks(ignorePreflightErrorsSet); err != nil {
-		return nil, nil, nil, err
-	}
 
 	// If the version is specified in config file, pick up that value.
 	if flags.cfgPath != "" {
@@ -67,7 +55,7 @@ func enforceRequirements(flags *applyPlanFlags, args []string, dryRun bool, vers
 		// Note that cfg isn't preserved here, it's just an one-off to populate newK8sVersion based on --config
 		cfg, err := configutil.ConfigFileAndDefaultsToInternalConfig(flags.cfgPath, &kubeadmapiv1beta1.InitConfiguration{})
 		if err != nil {
-			return nil, nil, nil, err
+			return "", err
 		}
 
 		if cfg.KubernetesVersion != "" {
@@ -82,9 +70,25 @@ func enforceRequirements(flags *applyPlanFlags, args []string, dryRun bool, vers
 
 	// the version arg is mandatory unless version is specified in the config file
 	if versionIsMandatory && (flags.cfgPath == "" || newK8sVersion != "") {
-		if err = cmdutil.ValidateExactArgNumber(args, []string{"version"}); err != nil {
-			return nil, nil, nil, err
+		if err := cmdutil.ValidateExactArgNumber(args, []string{"version"}); err != nil {
+			return "", err
 		}
+	}
+
+	return newK8sVersion, nil
+}
+
+// enforceRequirements verifies that it's okay to upgrade and then returns the variables needed for the rest of the procedure
+func enforceRequirements(flags *applyPlanFlags, newK8sVersion string, dryRun bool) (clientset.Interface, upgrade.VersionGetter, *kubeadmapi.InitConfiguration, error) {
+	ignorePreflightErrorsSet, err := validation.ValidateIgnorePreflightErrors(flags.ignorePreflightErrors)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Ensure the user is root
+	klog.V(1).Infof("running preflight checks")
+	if err := runPreflightChecks(ignorePreflightErrorsSet); err != nil {
+		return nil, nil, nil, err
 	}
 
 	client, err := getClient(flags.kubeConfigPath, dryRun)
