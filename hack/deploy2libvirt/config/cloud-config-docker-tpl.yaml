@@ -1,0 +1,41 @@
+#cloud-config
+
+# Hostname management
+preserve_hostname: False
+hostname: {{HOSTNAME}}
+fqdn: {{HOSTNAME}}.example.local
+
+package_update: true
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg-agent
+  - software-properties-common
+  - socat
+  - conntrack
+
+# Remove cloud-init when finished with it
+runcmd:
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+  - add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+  - [ apt-get, update ]
+  - [ apt-get, install, -y, docker-ce, docker-ce-cli, containerd.io ]
+  - [ apt-get, --purge, -y, remove, unattended-upgrades ]
+  - [ rm, -f, /etc/machine-id ]
+  - [ touch, /etc/machine-id ]
+  - [ touch, /all_is_done ]
+
+# Configure where output will go
+output:
+  all: ">> /var/log/cloud-init.log"
+
+# configure interaction with ssh server
+ssh_svcname: ssh
+ssh_deletekeys: True
+ssh_genkeytypes: ['rsa', 'ecdsa']
+
+# Install my public ssh key to the first user-defined user configured
+# in cloud.cfg in the template (which is centos for CentOS cloud images)
+ssh_authorized_keys:
+  - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDmdX7VspleP6fn3TQjKLKY/BKeQ68edEdRAUJG07A6FoFhYzTjknK4vx9nVRlkSQ68sbhcNgdutKdis6VN5yPO7WivGXuoXkaa6TAAtfmoYhPkPXfAphwOHsge/NrMBxkVUilmsKjDJWb75OtlKJ1ZhM58B18ipb+1Pk2ktdsCpDZrdg++bR+OQjl2SRjerr7BwdMGouTt0jplrs34aOnvINMQ4O8kub07rp3Fjy1RtAkUkxWUynZ+/cKIl/h8MOokxOP6LKtxcvIjCIuZAPtnquQuLdPj9yF7O5ubFEgKqYiRm3zctJYMRFQeHOY4snmFT5Rz7HK6LFv1tt96eqrX rojkov@desktop
