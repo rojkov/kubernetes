@@ -86,6 +86,7 @@ func fuzzInitConfiguration(obj *kubeadm.InitConfiguration, c fuzz.Continue) {
 
 	// Pin values for fields that are not present in v1beta1
 	obj.CertificateKey = ""
+	obj.PublicKeyAlgorithm = kubeadm.RSA
 }
 
 func fuzzNodeRegistration(obj *kubeadm.NodeRegistrationOptions, c fuzz.Continue) {

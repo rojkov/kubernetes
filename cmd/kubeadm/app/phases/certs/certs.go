@@ -61,12 +61,12 @@ func CreatePKIAssets(cfg *kubeadmapi.InitConfiguration) error {
 	fmt.Printf("[certs] Valid certificates and keys now exist in %q\n", cfg.CertificatesDir)
 
 	// Service accounts are not x509 certs, so handled separately
-	return CreateServiceAccountKeyAndPublicKeyFiles(cfg.CertificatesDir)
+	return CreateServiceAccountKeyAndPublicKeyFiles(cfg.CertificatesDir, cfg.PublicKeyAlgorithm)
 }
 
 // CreateServiceAccountKeyAndPublicKeyFiles creates new public/private key files for signing service account users.
 // If the sa public/private key files already exist in the target folder, they are used only if evaluated equals; otherwise an error is returned.
-func CreateServiceAccountKeyAndPublicKeyFiles(certsDir string) error {
+func CreateServiceAccountKeyAndPublicKeyFiles(certsDir string, keyType kubeadmapi.PublicKeyAlgorithm) error {
 	klog.V(1).Infoln("creating new public/private key files for signing service account users")
 	_, err := keyutil.PrivateKeyFromFile(filepath.Join(certsDir, kubeadmconstants.ServiceAccountPrivateKeyName))
 	if err == nil {
@@ -80,7 +80,7 @@ func CreateServiceAccountKeyAndPublicKeyFiles(certsDir string) error {
 	}
 
 	// The key does NOT exist, let's generate it now
-	key, err := pkiutil.NewPrivateKey()
+	key, err := pkiutil.NewPrivateKey(keyType)
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func CreateCACertAndKeyFiles(certSpec *KubeadmCert, cfg *kubeadmapi.InitConfigur
 	if certSpec.CAName != "" {
 		return errors.Errorf("this function should only be used for CAs, but cert %s has CA %s", certSpec.Name, certSpec.CAName)
 	}
-	klog.V(1).Infof("creating a new certificate authority for %s", certSpec.Name)
+	klog.V(1).Infof("creating a new certificate authority for %s (public key algo: %s)", certSpec.Name, cfg.PublicKeyAlgorithm)
 
 	certConfig, err := certSpec.GetConfig(cfg)
 	if err != nil {

@@ -242,6 +242,9 @@ var (
 		config: certutil.Config{
 			CommonName: "kubernetes",
 		},
+		configMutators: []configMutatorsFunc{
+			setPublicKeyAlgorithm(),
+		},
 	}
 	// KubeadmCertAPIServer is the definition of the cert used to serve the Kubernetes API.
 	KubeadmCertAPIServer = KubeadmCert{
@@ -255,6 +258,7 @@ var (
 		},
 		configMutators: []configMutatorsFunc{
 			makeAltNamesMutator(pkiutil.GetAPIServerAltNames),
+			setPublicKeyAlgorithm(),
 		},
 	}
 	// KubeadmCertKubeletClient is the definition of the cert used by the API server to access the kubelet.
@@ -268,6 +272,9 @@ var (
 			Organization: []string{kubeadmconstants.SystemPrivilegedGroup},
 			Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 		},
+		configMutators: []configMutatorsFunc{
+			setPublicKeyAlgorithm(),
+		},
 	}
 
 	// KubeadmCertFrontProxyCA is the definition of the CA used for the front end proxy.
@@ -277,6 +284,9 @@ var (
 		BaseName: kubeadmconstants.FrontProxyCACertAndKeyBaseName,
 		config: certutil.Config{
 			CommonName: "front-proxy-ca",
+		},
+		configMutators: []configMutatorsFunc{
+			setPublicKeyAlgorithm(),
 		},
 	}
 
@@ -290,6 +300,9 @@ var (
 			CommonName: kubeadmconstants.FrontProxyClientCertCommonName,
 			Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 		},
+		configMutators: []configMutatorsFunc{
+			setPublicKeyAlgorithm(),
+		},
 	}
 
 	// KubeadmCertEtcdCA is the definition of the root CA used by the hosted etcd server.
@@ -299,6 +312,9 @@ var (
 		BaseName: kubeadmconstants.EtcdCACertAndKeyBaseName,
 		config: certutil.Config{
 			CommonName: "etcd-ca",
+		},
+		configMutators: []configMutatorsFunc{
+			setPublicKeyAlgorithm(),
 		},
 	}
 	// KubeadmCertEtcdServer is the definition of the cert used to serve etcd to clients.
@@ -317,6 +333,7 @@ var (
 		configMutators: []configMutatorsFunc{
 			makeAltNamesMutator(pkiutil.GetEtcdAltNames),
 			setCommonNameToNodeName(),
+			setPublicKeyAlgorithm(),
 		},
 	}
 	// KubeadmCertEtcdPeer is the definition of the cert used by etcd peers to access each other.
@@ -331,6 +348,7 @@ var (
 		configMutators: []configMutatorsFunc{
 			makeAltNamesMutator(pkiutil.GetEtcdPeerAltNames),
 			setCommonNameToNodeName(),
+			setPublicKeyAlgorithm(),
 		},
 	}
 	// KubeadmCertEtcdHealthcheck is the definition of the cert used by Kubernetes to check the health of the etcd server.
@@ -344,6 +362,9 @@ var (
 			Organization: []string{kubeadmconstants.SystemPrivilegedGroup},
 			Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 		},
+		configMutators: []configMutatorsFunc{
+			setPublicKeyAlgorithm(),
+		},
 	}
 	// KubeadmCertEtcdAPIClient is the definition of the cert used by the API server to access etcd.
 	KubeadmCertEtcdAPIClient = KubeadmCert{
@@ -355,6 +376,9 @@ var (
 			CommonName:   kubeadmconstants.APIServerEtcdClientCertCommonName,
 			Organization: []string{kubeadmconstants.SystemPrivilegedGroup},
 			Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		},
+		configMutators: []configMutatorsFunc{
+			setPublicKeyAlgorithm(),
 		},
 	}
 )
@@ -373,6 +397,17 @@ func makeAltNamesMutator(f func(*kubeadmapi.InitConfiguration) (*certutil.AltNam
 func setCommonNameToNodeName() configMutatorsFunc {
 	return func(mc *kubeadmapi.InitConfiguration, cc *certutil.Config) error {
 		cc.CommonName = mc.NodeRegistration.Name
+		return nil
+	}
+}
+
+func setPublicKeyAlgorithm() configMutatorsFunc {
+	return func(mc *kubeadmapi.InitConfiguration, cc *certutil.Config) error {
+		if mc.PublicKeyAlgorithm == kubeadmapi.ECDSA {
+			cc.PublicKeyAlgorithm = x509.ECDSA
+		} else {
+			cc.PublicKeyAlgorithm = x509.RSA
+		}
 		return nil
 	}
 }

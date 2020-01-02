@@ -22,6 +22,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 	"k8s.io/kubernetes/cmd/kubeadm/app/constants"
 )
 
@@ -53,6 +54,8 @@ const (
 	DefaultProxyBindAddressv6 = "::"
 	// DefaultDiscoveryTimeout specifies the default discovery timeout for kubeadm (used unless one is specified in the JoinConfiguration)
 	DefaultDiscoveryTimeout = 5 * time.Minute
+	// DefaultPublicKeyAlgorithm is the default algorithm used for generating encryption keys
+	DefaultPublicKeyAlgorithm = kubeadmapi.RSA
 )
 
 var (
@@ -69,6 +72,12 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 func SetDefaults_InitConfiguration(obj *InitConfiguration) {
 	SetDefaults_BootstrapTokens(obj)
 	SetDefaults_APIEndpoint(&obj.LocalAPIEndpoint)
+
+	if obj.PublicKeyAlgorithm == nil {
+		obj.PublicKeyAlgorithm = &PublicKeyAlgorithm{
+			PublicKeyAlgorithm: DefaultPublicKeyAlgorithm,
+		}
+	}
 }
 
 // SetDefaults_ClusterConfiguration assigns default values for the ClusterConfiguration

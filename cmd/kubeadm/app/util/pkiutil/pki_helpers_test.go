@@ -33,7 +33,10 @@ import (
 )
 
 func TestNewCertificateAuthority(t *testing.T) {
-	cert, key, err := NewCertificateAuthority(&certutil.Config{CommonName: "kubernetes"})
+	cert, key, err := NewCertificateAuthority(&certutil.Config{
+		CommonName:         "kubernetes",
+		PublicKeyAlgorithm: x509.ECDSA,
+	})
 
 	if cert == nil {
 		t.Error("failed NewCertificateAuthority, cert == nil")
@@ -87,9 +90,10 @@ func TestNewCertAndKey(t *testing.T) {
 			}
 			caCert := &x509.Certificate{}
 			config := &certutil.Config{
-				CommonName:   "test",
-				Organization: []string{"test"},
-				Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+				CommonName:         "test",
+				Organization:       []string{"test"},
+				Usages:             []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+				PublicKeyAlgorithm: x509.ECDSA,
 			}
 			_, _, actual := NewCertAndKey(caCert, caKey, config)
 			if (actual == nil) != rt.expected {
@@ -112,18 +116,29 @@ func TestHasServerAuth(t *testing.T) {
 		expected bool
 	}{
 		{
-			name: "has ServerAuth",
+			name: "has ServerAuth ECDSA",
 			config: certutil.Config{
-				CommonName: "test",
-				Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+				CommonName:         "test",
+				Usages:             []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+				PublicKeyAlgorithm: x509.ECDSA,
+			},
+			expected: true,
+		},
+		{
+			name: "has ServerAuth RSA",
+			config: certutil.Config{
+				CommonName:         "test",
+				Usages:             []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+				PublicKeyAlgorithm: x509.RSA,
 			},
 			expected: true,
 		},
 		{
 			name: "doesn't have ServerAuth",
 			config: certutil.Config{
-				CommonName: "test",
-				Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+				CommonName:         "test",
+				Usages:             []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+				PublicKeyAlgorithm: x509.ECDSA,
 			},
 			expected: false,
 		},
@@ -285,7 +300,10 @@ func TestTryLoadCertAndKeyFromDisk(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpdir)
 
-	caCert, caKey, err := NewCertificateAuthority(&certutil.Config{CommonName: "kubernetes"})
+	caCert, caKey, err := NewCertificateAuthority(&certutil.Config{
+		CommonName:         "kubernetes",
+		PublicKeyAlgorithm: x509.ECDSA,
+	})
 	if err != nil {
 		t.Errorf(
 			"failed to create cert and key with an error: %v",
@@ -340,7 +358,10 @@ func TestTryLoadCertFromDisk(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpdir)
 
-	caCert, _, err := NewCertificateAuthority(&certutil.Config{CommonName: "kubernetes"})
+	caCert, _, err := NewCertificateAuthority(&certutil.Config{
+		CommonName:         "kubernetes",
+		PublicKeyAlgorithm: x509.ECDSA,
+	})
 	if err != nil {
 		t.Errorf(
 			"failed to create cert and key with an error: %v",

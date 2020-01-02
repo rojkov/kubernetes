@@ -22,7 +22,14 @@ import (
 )
 
 func Convert_kubeadm_InitConfiguration_To_v1beta2_InitConfiguration(in *kubeadm.InitConfiguration, out *InitConfiguration, s conversion.Scope) error {
-	return autoConvert_kubeadm_InitConfiguration_To_v1beta2_InitConfiguration(in, out, s)
+	if err := autoConvert_kubeadm_InitConfiguration_To_v1beta2_InitConfiguration(in, out, s); err != nil {
+		return err
+	}
+
+	out.PublicKeyAlgorithm = &PublicKeyAlgorithm{
+		PublicKeyAlgorithm: in.PublicKeyAlgorithm,
+	}
+	return nil
 }
 
 func Convert_v1beta2_InitConfiguration_To_kubeadm_InitConfiguration(in *InitConfiguration, out *kubeadm.InitConfiguration, s conversion.Scope) error {
@@ -34,5 +41,18 @@ func Convert_v1beta2_InitConfiguration_To_kubeadm_InitConfiguration(in *InitConf
 	// Keep the fuzzer test happy by setting out.ClusterConfiguration to defaults
 	clusterCfg := &ClusterConfiguration{}
 	SetDefaults_ClusterConfiguration(clusterCfg)
+	if in.PublicKeyAlgorithm != nil {
+		out.PublicKeyAlgorithm = in.PublicKeyAlgorithm.PublicKeyAlgorithm
+	}
 	return Convert_v1beta2_ClusterConfiguration_To_kubeadm_ClusterConfiguration(clusterCfg, &out.ClusterConfiguration, s)
+}
+
+func Convert_kubeadm_PublicKeyAlgorithm_To_v1beta2_PublicKeyAlgorithm(in *kubeadm.PublicKeyAlgorithm, out *PublicKeyAlgorithm, s conversion.Scope) error {
+	out.PublicKeyAlgorithm = *in
+	return nil
+}
+
+func Convert_v1beta2_PublicKeyAlgorithm_To_kubeadm_PublicKeyAlgorithm(in *PublicKeyAlgorithm, out *kubeadm.PublicKeyAlgorithm, s conversion.Scope) error {
+	*out = in.PublicKeyAlgorithm
+	return nil
 }

@@ -31,6 +31,10 @@ func Convert_kubeadm_InitConfiguration_To_v1beta1_InitConfiguration(in *kubeadm.
 		return errors.New("certificateKey field is not supported by v1beta1 config format")
 	}
 
+	if in.PublicKeyAlgorithm != kubeadm.RSA {
+		return errors.New("publicKeyAlgorithm field is not supported by v1beta1 config format")
+	}
+
 	return nil
 }
 

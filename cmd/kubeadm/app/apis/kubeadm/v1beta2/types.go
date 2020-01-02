@@ -50,6 +50,9 @@ type InitConfiguration struct {
 	// CertificateKey sets the key with which certificates and keys are encrypted prior to being uploaded in
 	// a secret in the cluster during the uploadcerts init phase.
 	CertificateKey string `json:"certificateKey,omitempty"`
+
+	// PublicKeyAlgorithm sets the algorithm used for generating encryption keys: RSA or ECDSA.
+	PublicKeyAlgorithm *PublicKeyAlgorithm `json:"publicKeyAlgorithm,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

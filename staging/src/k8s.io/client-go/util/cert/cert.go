@@ -39,10 +39,11 @@ const duration365d = time.Hour * 24 * 365
 
 // Config contains the basic fields required for creating a certificate
 type Config struct {
-	CommonName   string
-	Organization []string
-	AltNames     AltNames
-	Usages       []x509.ExtKeyUsage
+	CommonName         string
+	Organization       []string
+	AltNames           AltNames
+	Usages             []x509.ExtKeyUsage
+	PublicKeyAlgorithm x509.PublicKeyAlgorithm
 }
 
 // AltNames contains the domain names and IP addresses that will be added

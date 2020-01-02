@@ -691,6 +691,7 @@ func autoConvert_kubeadm_InitConfiguration_To_v1beta1_InitConfiguration(in *kube
 		return err
 	}
 	// WARNING: in.CertificateKey requires manual conversion: does not exist in peer-type
+	// WARNING: in.PublicKeyAlgorithm requires manual conversion: does not exist in peer-type
 	return nil
 }
 

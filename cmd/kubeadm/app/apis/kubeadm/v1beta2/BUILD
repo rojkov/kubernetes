@@ -9,6 +9,7 @@ go_library(
         "defaults_unix.go",
         "defaults_windows.go",
         "doc.go",
+        "public_key_algorithm.go",
         "register.go",
         "types.go",
         "zz_generated.conversion.go",

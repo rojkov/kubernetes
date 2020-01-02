@@ -414,6 +414,7 @@ func certToConfig(cert *x509.Certificate) *certutil.Config {
 			IPs:      cert.IPAddresses,
 			DNSNames: cert.DNSNames,
 		},
-		Usages: cert.ExtKeyUsage,
+		Usages:             cert.ExtKeyUsage,
+		PublicKeyAlgorithm: cert.PublicKeyAlgorithm,
 	}
 }

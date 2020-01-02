@@ -19,6 +19,7 @@ package pkiutil
 import (
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	cryptorand "crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -58,7 +59,7 @@ const (
 
 // NewCertificateAuthority creates new certificate and private key for the certificate authority
 func NewCertificateAuthority(config *certutil.Config) (*x509.Certificate, crypto.Signer, error) {
-	key, err := NewPrivateKey()
+	key, err := NewPrivateKey(kubeadmapi.ConvertToPublicKeyAlgorithm(config.PublicKeyAlgorithm))
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "unable to create private key while generating CA certificate")
 	}
@@ -73,7 +74,7 @@ func NewCertificateAuthority(config *certutil.Config) (*x509.Certificate, crypto
 
 // NewCertAndKey creates new certificate and key by passing the certificate authority certificate and key
 func NewCertAndKey(caCert *x509.Certificate, caKey crypto.Signer, config *certutil.Config) (*x509.Certificate, crypto.Signer, error) {
-	key, err := NewPrivateKey()
+	key, err := NewPrivateKey(kubeadmapi.ConvertToPublicKeyAlgorithm(config.PublicKeyAlgorithm))
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "unable to create private key")
 	}
@@ -88,7 +89,7 @@ func NewCertAndKey(caCert *x509.Certificate, caKey crypto.Signer, config *certut
 
 // NewCSRAndKey generates a new key and CSR and that could be signed to create the given certificate
 func NewCSRAndKey(config *certutil.Config) (*x509.CertificateRequest, crypto.Signer, error) {
-	key, err := NewPrivateKey()
+	key, err := NewPrivateKey(kubeadmapi.ConvertToPublicKeyAlgorithm(config.PublicKeyAlgorithm))
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "unable to create private key")
 	}
@@ -538,8 +539,14 @@ func EncodePublicKeyPEM(key crypto.PublicKey) ([]byte, error) {
 }
 
 // NewPrivateKey creates an RSA private key
-func NewPrivateKey() (crypto.Signer, error) {
-	return rsa.GenerateKey(cryptorand.Reader, rsaKeySize)
+func NewPrivateKey(keyType kubeadmapi.PublicKeyAlgorithm) (crypto.Signer, error) {
+	switch keyType {
+	case kubeadmapi.ECDSA:
+		return ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
+	case kubeadmapi.RSA:
+		return rsa.GenerateKey(cryptorand.Reader, rsaKeySize)
+	}
+	return nil, errors.Errorf("unsupported public key algorithm: %s", keyType)
 }
 
 // NewSignedCert creates a signed certificate using the given CA certificate and key
