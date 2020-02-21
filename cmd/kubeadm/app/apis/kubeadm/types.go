@@ -17,11 +17,21 @@ limitations under the License.
 package kubeadm
 
 import (
+	"crypto/x509"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	certutil "k8s.io/client-go/util/cert"
+	"k8s.io/kubernetes/cmd/kubeadm/app/features"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+// CertConfig is a wrapper around certutil.Config extending it with PublicKeyAlgorithm.
+type CertConfig struct {
+	certutil.Config
+	PublicKeyAlgorithm x509.PublicKeyAlgorithm
+}
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
@@ -398,6 +408,15 @@ func (cfg *ClusterConfiguration) GetControlPlaneImageRepository() string {
 		return cfg.CIImageRepository
 	}
 	return cfg.ImageRepository
+}
+
+// PublicKeyAlgorithm returns the type of encryption keys used in the cluster.
+func (cfg *ClusterConfiguration) PublicKeyAlgorithm() x509.PublicKeyAlgorithm {
+	if features.Enabled(cfg.FeatureGates, features.PublicKeysECDSA) {
+		return x509.ECDSA
+	}
+
+	return x509.RSA
 }
 
 // HostPathMount contains elements describing volumes that are mounted from the

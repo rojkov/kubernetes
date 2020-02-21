@@ -26,13 +26,16 @@ import (
 
 	certutil "k8s.io/client-go/util/cert"
 	"k8s.io/client-go/util/keyutil"
+	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 	pkiutil "k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 )
 
 // SetupCertificateAuthority is a utility function for kubeadm testing that creates a
 // CertificateAuthority cert/key pair
 func SetupCertificateAuthority(t *testing.T) (*x509.Certificate, crypto.Signer) {
-	caCert, caKey, err := pkiutil.NewCertificateAuthority(&certutil.Config{CommonName: "kubernetes"})
+	caCert, caKey, err := pkiutil.NewCertificateAuthority(&kubeadmapi.CertConfig{
+		Config: certutil.Config{CommonName: "kubernetes"},
+	})
 	if err != nil {
 		t.Fatalf("failure while generating CA certificate and key: %v", err)
 	}
@@ -132,7 +135,7 @@ func AssertCertificateHasIPAddresses(t *testing.T, cert *x509.Certificate, IPAdd
 
 // CreateCACert creates a generic CA cert.
 func CreateCACert(t *testing.T) (*x509.Certificate, crypto.Signer) {
-	certCfg := &certutil.Config{CommonName: "kubernetes"}
+	certCfg := &kubeadmapi.CertConfig{Config: certutil.Config{CommonName: "kubernetes"}}
 	cert, key, err := pkiutil.NewCertificateAuthority(certCfg)
 	if err != nil {
 		t.Fatalf("couldn't create CA: %v", err)
@@ -141,11 +144,13 @@ func CreateCACert(t *testing.T) (*x509.Certificate, crypto.Signer) {
 }
 
 // CreateTestCert makes a generic certificate with the given CA and alternative names.
-func CreateTestCert(t *testing.T, caCert *x509.Certificate, caKey crypto.Signer, altNames certutil.AltNames) (*x509.Certificate, crypto.Signer, *certutil.Config) {
-	config := &certutil.Config{
-		CommonName: "testCert",
-		Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
-		AltNames:   altNames,
+func CreateTestCert(t *testing.T, caCert *x509.Certificate, caKey crypto.Signer, altNames certutil.AltNames) (*x509.Certificate, crypto.Signer, *kubeadmapi.CertConfig) {
+	config := &kubeadmapi.CertConfig{
+		Config: certutil.Config{
+			CommonName: "testCert",
+			Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+			AltNames:   altNames,
+		},
 	}
 	cert, key, err := pkiutil.NewCertAndKey(caCert, caKey, config)
 	if err != nil {

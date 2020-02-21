@@ -20,7 +20,7 @@ import (
 	"crypto"
 	"crypto/x509"
 
-	certutil "k8s.io/client-go/util/cert"
+	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 )
 
@@ -39,6 +39,6 @@ func NewFileRenewer(caCert *x509.Certificate, caKey crypto.Signer) *FileRenewer 
 }
 
 // Renew a certificate using a given CA cert and key
-func (r *FileRenewer) Renew(cfg *certutil.Config) (*x509.Certificate, crypto.Signer, error) {
+func (r *FileRenewer) Renew(cfg *kubeadmapi.CertConfig) (*x509.Certificate, crypto.Signer, error) {
 	return pkiutil.NewCertAndKey(r.caCert, r.caKey, cfg)
 }

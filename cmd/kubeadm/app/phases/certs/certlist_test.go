@@ -160,16 +160,18 @@ func TestCreateCertificateChain(t *testing.T) {
 
 	caCfg := Certificates{
 		{
-			config:   certutil.Config{},
+			config:   kubeadmapi.CertConfig{},
 			Name:     "test-ca",
 			BaseName: "test-ca",
 		},
 		{
-			config: certutil.Config{
-				AltNames: certutil.AltNames{
-					DNSNames: []string{"test-domain.space"},
+			config: kubeadmapi.CertConfig{
+				Config: certutil.Config{
+					AltNames: certutil.AltNames{
+						DNSNames: []string{"test-domain.space"},
+					},
+					Usages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 				},
-				Usages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 			},
 			configMutators: []configMutatorsFunc{
 				setCommonNameToNodeName(),
